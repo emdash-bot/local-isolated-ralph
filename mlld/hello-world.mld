@@ -1,0 +1,38 @@
+>> hello-world.mld
+>> mlld rebuild of examples/hello-world-local/workflow.ts
+>>
+>> Original: TypeScript/Smithers workflow using CodexAgent
+>> This: mlld script with automatic LLM checkpointing
+>>
+>> Usage: mlld run mlld/hello-world.mld
+>> Resume: mlld run mlld/hello-world.mld --resume @generate_page
+
+>> ── Configuration ────────────────────────────────────────────────────────────
+
+var @workdir = cmd {pwd}
+
+>> ── Task: Generate hello-world HTML ─────────────────────────────────────────
+>> Checkpointed automatically (llm label) — re-runs on --fresh or --resume @generate_page
+
+exe llm @generate_page = sh {
+  codex exec --full-auto --json "Create a file at public/hello-world.html in this workspace with valid HTML that renders a single \"Hello, world.\" heading.
+
+Requirements:
+- Create the file directly on disk.
+- Keep HTML minimal and valid.
+
+Return ONLY JSON with this shape:
+{\"filePath\":\"public/hello-world.html\",\"html\":\"<!doctype html>...\",\"summary\":\"...\"}"
+}
+
+>> ── Run ──────────────────────────────────────────────────────────────────────
+
+show `Running hello-world workflow in @workdir`
+
+var @raw = @generate_page()
+var @result = @raw | @parse.llm
+
+checkpoint "generate-done"
+
+show `✓ Generated: @result.filePath`
+show `  Summary:   @result.summary`

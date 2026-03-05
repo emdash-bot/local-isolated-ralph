@@ -1,0 +1,111 @@
+>> counter-app.mld
+>> mlld rebuild of examples/counter-local/workflow.tsx
+>>
+>> Original: TypeScript/Smithers JSX workflow with 4 conditional tasks
+>> This: mlld script with env-driven VCS, checkpointing, and conditional flow
+>>
+>> Usage:
+>>   mlld run mlld/counter-app.mld
+>>   SMITHERS_JJ_REPO=https://... SMITHERS_JJ_BOOKMARK=main mlld run mlld/counter-app.mld
+>>
+>> Resume interrupted run: mlld run mlld/counter-app.mld --resume @implement_app
+
+>> ── Configuration ────────────────────────────────────────────────────────────
+
+var @app_name = @env.SMITHERS_APP_NAME ?? "react-counter-app"
+var @workdir  = cmd {pwd}
+var @app_dir  = `@workdir/@app_name`
+var @jj_repo  = @env.SMITHERS_JJ_REPO ?? ""
+var @jj_bm    = @env.SMITHERS_JJ_BOOKMARK ?? ""
+var @model    = @env.SMITHERS_MODEL ?? ""
+
+>> ── Helpers ──────────────────────────────────────────────────────────────────
+
+>> Clone a jj repo into target; errors if target already exists
+exe @clone_repo(repo, target) = sh {
+  if [ -d "$target" ]; then echo "ERROR: $target already exists" >&2; exit 1; fi
+  jj git clone "$repo" "$target"
+}
+
+>> Ensure a plain directory exists (no jj)
+exe @ensure_dir(target) = sh {
+  mkdir -p "$target"
+}
+
+>> Commit and push with jj if there are changes
+exe @jj_commit_push(dir, app_nm, bookmark) = sh {
+  cd "$dir"
+  if [ ! -d ".jj" ]; then echo "ERROR: missing .jj in $dir" >&2; exit 1; fi
+  DIFF=$(jj diff --summary -r @)
+  if [ -z "$DIFF" ]; then echo "Nothing to commit."; exit 0; fi
+  jj commit -m "feat(counter-local): generate $app_nm"
+  jj bookmark set "$bookmark" -r @
+  jj git push --bookmark "$bookmark"
+}
+
+>> ── LLM Task: Implement the counter app ─────────────────────────────────────
+>> llm label enables automatic checkpointing — resume with --resume @implement_app
+
+var @jj_note = when [
+  @jj_repo => "The repo is already cloned into the target path."
+  *        => "The target folder already exists."
+]
+
+var @model_flag = when [
+  @model => `--model @model`
+  *      => ""
+]
+
+exe llm @implement_app(workdir, app_name, app_dir, jj_note, model_flag) = sh {
+  codex exec --full-auto $model_flag --json "Create a simple React counter app.
+
+Working directory: $workdir
+Target folder name: $app_name
+Target path: $app_dir
+
+Requirements:
+- $jj_note
+- Build a Vite + React app in the target folder.
+- Implement a counter UI with increment, decrement, and reset buttons.
+- Include minimal styling.
+- Use pinned dependency versions only (no latest, ^, ~, *).
+- Create project files directly in the filesystem.
+- Do not ask questions; complete the implementation now.
+- Do not run any jj commands; workflow steps handle VCS.
+
+Return ONLY JSON: {\"appName\":\"...\",\"appDir\":\"...\",\"filesCreated\":[],\"summary\":\"...\",\"runCommands\":[]}"
+}
+
+>> ── Workflow execution ────────────────────────────────────────────────────────
+
+show `Preparing workspace at @app_dir`
+
+>> Task 1/2: Prepare workspace (conditional on VCS mode)
+if @jj_repo [
+  @clone_repo(@jj_repo, @app_dir)
+] else [
+  @ensure_dir(@app_dir)
+]
+checkpoint "workspace-ready"
+
+>> Task 3: Implement counter app (LLM — auto-checkpointed)
+show `Running counter app implementation`
+var @raw  = @implement_app(@workdir, @app_name, @app_dir, @jj_note, @model_flag)
+var @impl = @raw | @parse.llm
+
+checkpoint "implementation-done"
+
+show `✓ @impl.appName implemented at @impl.appDir`
+show `  Files created:`
+for @f in @impl.filesCreated => show `    - @f`
+show `  To run locally:`
+for @c in @impl.runCommands => show `    @c`
+
+>> Task 4: Commit and push (conditional on JJ bookmark)
+if @jj_bm [
+  show `Pushing to bookmark @jj_bm`
+  @jj_commit_push(@app_dir, @app_name, @jj_bm)
+]
+checkpoint "pushed"
+
+show `Workflow complete.`
