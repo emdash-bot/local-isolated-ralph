@@ -57,7 +57,7 @@ var @model_flag = when [
 ]
 
 exe llm @implement_app(workdir, app_name, app_dir, jj_note, model_flag) = sh {
-  codex exec --full-auto $model_flag --json "Create a simple React counter app.
+  codex exec --full-auto $model_flag "Create a simple React counter app.
 
 Working directory: $workdir
 Target folder name: $app_name
@@ -96,10 +96,14 @@ var @impl = @raw | @parse.llm
 checkpoint "implementation-done"
 
 show `✓ @impl.appName implemented at @impl.appDir`
-show `  Files created:`
-for @f in @impl.filesCreated => show `    - @f`
-show `  To run locally:`
-for @c in @impl.runCommands => show `    @c`
+if @impl.filesCreated [
+  show `  Files created:`
+  for @f in @impl.filesCreated => show `    - @f`
+]
+if @impl.runCommands [
+  show `  To run locally:`
+  for @c in @impl.runCommands => show `    @c`
+]
 
 >> Task 4: Commit and push (conditional on JJ bookmark)
 if @jj_bm [

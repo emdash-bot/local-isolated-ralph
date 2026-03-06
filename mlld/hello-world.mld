@@ -15,7 +15,7 @@ var @workdir = cmd {pwd}
 >> Checkpointed automatically (llm label) — re-runs on --fresh or --resume @generate_page
 
 exe llm @generate_page = sh {
-  codex exec --full-auto --json "Create a file at public/hello-world.html in this workspace with valid HTML that renders a single \"Hello, world.\" heading.
+  codex exec --full-auto "Create a file at public/hello-world.html in this workspace with valid HTML that renders a single \"Hello, world.\" heading.
 
 Requirements:
 - Create the file directly on disk.
